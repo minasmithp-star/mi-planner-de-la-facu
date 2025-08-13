@@ -3,144 +3,180 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Budget Dashboard</title>
+  <title>Planificador — Universidad & Finanzas</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- Chart.js CDN -->
+  <!-- Chart.js para la pestaña Finanzas -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<header class="hero">
-  <div class="hero__text">
-    <h1>Budget Dashboard</h1>
-    <p>Monitor your income & expenses for any date range</p>
+<header class="app-header">
+  <div class="brand">
+    <h1>Planificador — Universidad & Finanzas</h1>
+    <p class="muted">Organiza tu semestre y controla tus gastos en un solo lugar</p>
   </div>
-  <div class="hero__actions">
-    <label class="file-btn">
-      Importar <input id="importInput" type="file" accept="application/json" hidden />
+  <div class="header-actions">
+    <label class="btn file-label">Importar
+      <input id="importInput" type="file" accept="application/json" hidden />
     </label>
     <button id="exportBtn" class="btn">Exportar</button>
     <button id="resetBtn" class="btn btn-ghost" title="Borrar datos locales">Reiniciar</button>
   </div>
 </header>
 
+<nav class="tabs">
+  <button class="tab active" data-tab="academico">Planificador</button>
+  <button class="tab" data-tab="finanzas">Finanzas</button>
+</nav>
+
 <main class="container">
-  <!-- Filtros -->
-  <section class="card filters">
-    <div class="row">
-      <div class="col">
-        <label>Desde</label>
-        <input id="fromDate" type="date" class="input" />
+  <!-- ================== PESTAÑA PLANIFICADOR ================== -->
+  <section id="tab-academico" class="tabpanel active">
+    <!-- Resumen -->
+    <section class="card summary">
+      <div class="summary-grid">
+        <div><div class="stat-title">Asignaturas</div><div class="stat-value" id="statSubjects">0</div></div>
+        <div><div class="stat-title">Tareas pendientes</div><div class="stat-value" id="statTodos">0</div></div>
+        <div><div class="stat-title">Progreso promedio</div><div class="stat-value" id="statAvgProgress">0%</div></div>
+        <div><div class="stat-title">Próxima entrega</div><div class="stat-value" id="statNextDue">—</div></div>
       </div>
-      <div class="col">
-        <label>Hasta</label>
-        <input id="toDate" type="date" class="input" />
+    </section>
+
+    <!-- Horario semanal -->
+    <section class="card">
+      <div class="section-header">
+        <h2>Horario semanal</h2>
+        <div class="actions">
+          <button id="addSubjectBtn" class="btn">Añadir asignatura</button>
+          <input id="subjectSearch" class="input" placeholder="Buscar asignatura..." />
+        </div>
       </div>
-      <div class="col">
-        <label>Rollover (mes previo)</label>
-        <input id="rollover" type="number" step="0.01" class="input" placeholder="0.00" />
+      <div id="subjectList" class="subject-list"></div>
+
+      <h3>Calendario semanal</h3>
+      <div class="timetable">
+        <div class="timetable-head">
+          <div></div>
+          <div>Lunes</div><div>Martes</div><div>Miércoles</div>
+          <div>Jueves</div><div>Viernes</div><div>Sábado</div>
+        </div>
+        <div class="timetable-body" id="timetableGrid"></div>
       </div>
-      <div class="col col-actions">
-        <button id="applyRange" class="btn">Aplicar</button>
+    </section>
+
+    <!-- Tareas -->
+    <section class="card">
+      <div class="section-header">
+        <h2>Tareas</h2>
+        <div class="actions">
+          <select id="filterStatus" class="input">
+            <option value="all">Todas</option>
+            <option value="open">Pendientes</option>
+            <option value="done">Completadas</option>
+          </select>
+          <select id="filterSubject" class="input">
+            <option value="all">Todas las asignaturas</option>
+          </select>
+          <input id="taskSearch" class="input" placeholder="Buscar por título o etiqueta..." />
+          <button id="addTaskBtn" class="btn">Añadir tarea</button>
+        </div>
       </div>
-    </div>
+      <div id="taskList" class="task-list"></div>
+    </section>
+
+    <!-- Notas -->
+    <section class="card">
+      <div class="section-header">
+        <h2>Notas y porcentajes</h2>
+        <div class="actions">
+          <select id="gradeSubjectSelect" class="input"></select>
+          <button id="addCategoryBtn" class="btn">Añadir categoría</button>
+        </div>
+      </div>
+
+      <div id="gradeSummary" class="grade-summary">
+        <div class="grade-line"><span>Nota actual:</span><strong id="currentGrade">0%</strong></div>
+        <div class="progress"><div id="gradeProgressBar" class="progress-bar" style="width:0%"></div></div>
+        <div class="grade-line small">Suma de pesos usados: <span id="usedWeight">0%</span> (lo ideal: ≤ 100%)</div>
+      </div>
+      <div id="categoryList" class="category-list"></div>
+    </section>
   </section>
 
-  <!-- Gráficos -->
-  <section class="grid-2">
-    <div class="card">
-      <h3>Spending Overview</h3>
-      <canvas id="pieSpending" height="220"></canvas>
-    </div>
-    <div class="card">
-      <h3>Budget vs Actual</h3>
-      <canvas id="barBudgetActual" height="220"></canvas>
-    </div>
-  </section>
-
-  <!-- Cashflow Summary -->
-  <section class="card">
-    <div class="section-header">
-      <h2>Cashflow Summary</h2>
-      <div class="mini">
-        <span class="pill">Principiante</span>
-        <span class="pill pill-outline">Meses personalizables</span>
+  <!-- ================== PESTAÑA FINANZAS ================== -->
+  <section id="tab-finanzas" class="tabpanel">
+    <!-- Filtros -->
+    <section class="card">
+      <div class="row">
+        <div class="col"><label>Desde</label><input id="fromDate" type="date" class="input" /></div>
+        <div class="col"><label>Hasta</label><input id="toDate" type="date" class="input" /></div>
+        <div class="col"><label>Rollover (mes previo)</label><input id="rollover" type="number" step="0.01" class="input" placeholder="0.00" /></div>
+        <div class="col col-actions"><button id="applyRange" class="btn">Aplicar</button></div>
       </div>
-    </div>
-    <div class="table-responsive">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Categoría</th><th>Budget</th><th>Actual</th>
-          </tr>
-        </thead>
-        <tbody id="cashflowBody"></tbody>
-        <tfoot>
-          <tr class="row-strong">
-            <td>Left To Spend</td>
-            <td id="leftBudget">$ 0.00</td>
-            <td id="leftActual">$ 0.00</td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-  </section>
+    </section>
 
-  <!-- Ingresos -->
-  <section class="card">
-    <div class="section-header">
-      <h2>Income</h2>
-      <div class="actions">
-        <button id="addIncomeBtn" class="btn">Añadir ingreso</button>
-      </div>
-    </div>
-    <div class="table-responsive">
-      <table class="table" id="incomeTable">
-        <thead>
-          <tr>
-            <th>Fecha</th><th>Fuente</th><th>Monto</th><th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="incomeBody"></tbody>
-        <tfoot>
-          <tr class="row-strong"><td colspan="2">Total Income</td><td id="incomeTotal">$ 0.00</td><td></td></tr>
-        </tfoot>
-      </table>
-    </div>
-  </section>
+    <!-- Gráficos -->
+    <section class="grid-2">
+      <div class="card"><h3>Visión de gastos</h3><canvas id="pieSpending" height="220"></canvas></div>
+      <div class="card"><h3>Presupuesto vs Real</h3><canvas id="barBudgetActual" height="220"></canvas></div>
+    </section>
 
-  <!-- Gastos -->
-  <section class="card">
-    <div class="section-header">
-      <h2>Expenses</h2>
-      <div class="actions">
-        <select id="categoryFilter" class="input"></select>
-        <button id="addExpenseBtn" class="btn">Añadir gasto</button>
-        <button id="manageCatsBtn" class="btn btn-ghost">Categorías</button>
+    <!-- Resumen -->
+    <section class="card">
+      <div class="section-header">
+        <h2>Resumen de flujo de caja</h2>
+        <div class="mini"><span class="pill">Diseño simple</span><span class="pill pill-outline">Rango de fechas</span></div>
       </div>
-    </div>
-    <div class="table-responsive">
-      <table class="table" id="expenseTable">
-        <thead>
-          <tr>
-            <th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Budget</th><th>Actual</th><th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="expenseBody"></tbody>
-        <tfoot>
-          <tr class="row-strong"><td colspan="3">Totales</td><td id="budgetTotal">$ 0.00</td><td id="actualTotal">$ 0.00</td><td></td></tr>
-        </tfoot>
-      </table>
-    </div>
+      <div class="table-responsive">
+        <table class="table">
+          <thead><tr><th>Categoría</th><th>Presupuesto</th><th>Real</th></tr></thead>
+          <tbody id="cashflowBody"></tbody>
+          <tfoot>
+            <tr class="row-strong"><td>Saldo para gastar</td><td id="leftBudget">$ 0,00</td><td id="leftActual">$ 0,00</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Ingresos -->
+    <section class="card">
+      <div class="section-header"><h2>Ingresos</h2><div class="actions"><button id="addIncomeBtn" class="btn">Añadir ingreso</button></div></div>
+      <div class="table-responsive">
+        <table class="table" id="incomeTable">
+          <thead><tr><th>Fecha</th><th>Fuente</th><th>Monto</th><th>Acciones</th></tr></thead>
+          <tbody id="incomeBody"></tbody>
+          <tfoot><tr class="row-strong"><td colspan="2">Total ingresos</td><td id="incomeTotal">$ 0,00</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Gastos -->
+    <section class="card">
+      <div class="section-header">
+        <h2>Gastos</h2>
+        <div class="actions">
+          <select id="categoryFilter" class="input"></select>
+          <button id="addExpenseBtn" class="btn">Añadir gasto</button>
+          <button id="manageCatsBtn" class="btn btn-ghost">Categorías</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table" id="expenseTable">
+          <thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Presupuesto</th><th>Real</th><th>Acciones</th></tr></thead>
+          <tbody id="expenseBody"></tbody>
+          <tfoot><tr class="row-strong"><td colspan="3">Totales</td><td id="budgetTotal">$ 0,00</td><td id="actualTotal">$ 0,00</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </section>
   </section>
 </main>
 
-<!-- Modal -->
+<!-- Modal genérico -->
 <dialog id="modal" class="modal">
   <form method="dialog" class="modal-box" id="modalContent"></form>
 </dialog>
 
-<footer class="footer">
-  <small>Dashboard basado en tu referencia, optimizado para GitHub Pages · 💗</small>
+<footer class="app-footer">
+  <span>Todo en español · Listo para GitHub Pages 💜</span>
 </footer>
 
 <script src="script.js"></script>
