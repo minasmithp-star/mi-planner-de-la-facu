@@ -1,1 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Planeador — Universidad</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="app-header">
+  <h1>Planeador — Universidad</h1>
+  <div class="header-actions">
+    <button id="exportBtn" class="btn">Exportar</button>
+    <label class="btn file-label">
+      Importar <input id="importInput" type="file" accept="application/json" hidden />
+    </label>
+    <button id="resetBtn" class="btn btn-ghost" title="Borrar datos locales">Reiniciar</button>
+  </div>
+</header>
 
+<main class="container">
+  <!-- Panel resumen -->
+  <section class="card summary">
+    <div class="summary-grid">
+      <div>
+        <div class="stat-title">Asignaturas</div>
+        <div class="stat-value" id="statSubjects">0</div>
+      </div>
+      <div>
+        <div class="stat-title">Tareas pendientes</div>
+        <div class="stat-value" id="statTodos">0</div>
+      </div>
+      <div>
+        <div class="stat-title">Progreso promedio</div>
+        <div class="stat-value" id="statAvgProgress">0%</div>
+      </div>
+      <div>
+        <div class="stat-title">Próxima entrega</div>
+        <div class="stat-value" id="statNextDue">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Horario semanal -->
+  <section class="card">
+    <div class="section-header">
+      <h2>Horario semanal</h2>
+      <div class="actions">
+        <button id="addSubjectBtn" class="btn">Añadir asignatura</button>
+        <input id="subjectSearch" class="input" placeholder="Buscar asignatura..." />
+      </div>
+    </div>
+
+    <div id="subjectList" class="subject-list"></div>
+
+    <h3>Calendario semanal</h3>
+    <div class="timetable">
+      <div class="timetable-head">
+        <div></div>
+        <div>Lunes</div><div>Martes</div><div>Miércoles</div><div>Jueves</div><div>Viernes</div><div>Sábado</div>
+      </div>
+      <div class="timetable-body" id="timetableGrid"></div>
+    </div>
+  </section>
+
+  <!-- Tareas -->
+  <section class="card">
+    <div class="section-header">
+      <h2>Tareas</h2>
+      <div class="actions">
+        <select id="filterStatus" class="input">
+          <option value="all">Todas</option>
+          <option value="open">Pendientes</option>
+          <option value="done">Completadas</option>
+        </select>
+        <select id="filterSubject" class="input">
+          <option value="all">Todas las asignaturas</option>
+        </select>
+        <input id="taskSearch" class="input" placeholder="Buscar por título o etiqueta..." />
+        <button id="addTaskBtn" class="btn">Añadir tarea</button>
+      </div>
+    </div>
+
+    <div id="taskList" class="task-list"></div>
+  </section>
+
+  <!-- Notas y porcentajes -->
+  <section class="card">
+    <div class="section-header">
+      <h2>Notas y porcentajes</h2>
+      <div class="actions">
+        <select id="gradeSubjectSelect" class="input"></select>
+        <button id="addCategoryBtn" class="btn">Añadir categoría</button>
+      </div>
+    </div>
+
+    <div id="gradeSummary" class="grade-summary">
+      <div class="grade-line">
+        <span>Nota actual:</span>
+        <strong id="currentGrade">0.00</strong>
+      </div>
+      <div class="progress">
+        <div id="gradeProgressBar" class="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="grade-line small">Suma de pesos usados: <span id="usedWeight">0%</span> (lo ideal: ≤ 100%)</div>
+    </div>
+
+    <div id="categoryList" class="category-list"></div>
+  </section>
+</main>
+
+<!-- Modal genérico -->
+<dialog id="modal" class="modal">
+  <form method="dialog" class="modal-box" id="modalContent"></form>
+</dialog>
+
+<footer class="app-footer">
+  <span>Hecho para organizar tu semestre 💙</span>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
