@@ -59,16 +59,29 @@ body{
 .container{max-width:1200px;margin:18px auto;padding:0 16px;display:grid;gap:16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 
-/* Gráficas (más pequeñas) */
+/* Gráficas pequeñas */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .card.chart.small .chartbox{height:160px}
 .chartbox canvas{width:100% !important;height:100% !important}
 
-/* Controles */
+/* Panel de foco */
+.focus-panel .focus-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.focus-panel h3{margin:0 0 8px 0}
+.focus-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.focus-item{
+  border:1px solid var(--border);border-radius:12px;padding:8px 10px;background:#fff;
+  display:flex;align-items:center;justify-content:space-between;gap:8px
+}
+.focus-main{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.focus-title{font-weight:800}
+.focus-chip{padding:3px 8px;border-radius:999px;background:#f7eaf5;border:1px solid var(--border);font-weight:700;color:#6b3b59}
+.focus-actions{display:flex;gap:6px;flex-wrap:wrap}
+.mini-btn{background:#fff;border:1px solid var(--border);border-radius:10px;padding:4px 8px;cursor:pointer;font-weight:800;color:#6b3b59}
+.mini-btn:hover{background:#f8f3f7}
+
+/* Controles y tabla */
 .filters{display:flex;gap:10px;flex-wrap:wrap}
 .input, select{padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;min-height:40px}
-
-/* Tabla */
 .table-responsive{overflow:auto}
 .table{width:100%;border-collapse:separate;border-spacing:0;min-width:1000px}
 .table th,.table td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
@@ -77,34 +90,29 @@ body{
 .badge{padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-weight:800}
 .badge.status{border:none}
 
-/* ESTADOS — tonos pastel */
+/* ESTADOS — pastel */
 .status.not {background:#ffdbe6; color:#6e2a41;}   /* No iniciado */
 .status.prog{background:#ffe7cc; color:#6e4a12;}   /* En progreso */
 .status.sub {background:#ffe0f0; color:#6e2a50;}   /* Entregado */
 .status.grad{background:#efe6ff; color:#4b2b74;}   /* Calificado */
 .status.done{background:#e6f5ee; color:#1b5d41;}   /* Completado */
 
-/* PRIORIDAD — tonos pastel */
+/* PRIORIDAD — pastel */
 .priority.high{background:#ffd6d9;color:#7a1f1f;border-color:#ffd6d9}
 .priority.med {background:#ffebc7;color:#7a4b14;border-color:#ffebc7}
 .priority.low {background:#d9f7e8;color:#145a36;border-color:#d9f7e8}
 
-/* Fondo de fila según prioridad (suave) */
+/* Fondo de fila por prioridad */
 tr.row-high {background:#fff4f5}
 tr.row-med  {background:#fff8ec}
 tr.row-low  {background:#f4fbf7}
 
-/* “Termómetro” de Días */
-.thermo{
-  position:relative;width:90px;height:16px;border-radius:999px;
-  background:#f3eef3;border:1px solid var(--border);overflow:hidden;
-}
+/* Termómetro de Días */
+.thermo{position:relative;width:90px;height:16px;border-radius:999px;background:#f3eef3;border:1px solid var(--border);overflow:hidden}
 .thermo-bar{position:absolute;left:0;top:0;bottom:0;border-radius:999px}
-.thermo-label{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-  font-size:.8rem;color:#5c4f65;font-weight:800
-}
+.thermo-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.8rem;color:#5c4f65;font-weight:800}
 
+/* Acciones */
 .actions-row .link{color:#7a2851;cursor:pointer;font-weight:800}
 .actions-row .link:hover{text-decoration:underline}
 
@@ -112,12 +120,18 @@ tr.row-low  {background:#f4fbf7}
 
 /* Modal */
 .modal{border:none;border-radius:18px;padding:0}
-.modal-box{min-width:320px;max-width:680px;border:none;padding:0}
+.modal-box{min-width:320px;max-width:720px;border:none;padding:0}
 .modal .form{display:grid;gap:10px;padding:16px}
 .modal .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .modal .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
 .modal .actions{display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding:12px 16px;background:#fff}
 
+/* Subtareas */
+.sublist{display:grid;gap:6px}
+.subrow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;background:#faf7fb;border:1px dashed var(--border);border-radius:10px;padding:6px}
+.subrow input[type="text"]{border:1px solid var(--border);border-radius:8px;padding:6px 8px}
+
 @media (max-width:900px){
   .grid-2{grid-template-columns:1fr}
+  .focus-panel .focus-cols{grid-template-columns:1fr}
 }
