@@ -32,7 +32,7 @@
 </header>
 
 <main class="container">
-  <!-- Gráficas (más pequeñas) -->
+  <!-- Gráficas (pequeñas) -->
   <section class="grid-2">
     <div class="card chart small">
       <h3>Estados de las tareas</h3>
@@ -41,6 +41,24 @@
     <div class="card chart small">
       <h3>Distribución de notas (1–10)</h3>
       <div class="chartbox"><canvas id="barGrades"></canvas></div>
+    </div>
+  </section>
+
+  <!-- Panel de foco: Atrasadas / Hoy / Próximos 7 días -->
+  <section class="card focus-panel">
+    <div class="focus-cols">
+      <div class="focus-col">
+        <h3>Atrasadas</h3>
+        <ul id="listOverdue" class="focus-list"></ul>
+      </div>
+      <div class="focus-col">
+        <h3>Hoy</h3>
+        <ul id="listToday" class="focus-list"></ul>
+      </div>
+      <div class="focus-col">
+        <h3>Próximos 7 días</h3>
+        <ul id="listWeek" class="focus-list"></ul>
+      </div>
     </div>
   </section>
 
