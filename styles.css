@@ -19,9 +19,10 @@ body{
   margin:0;
   font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
   color:var(--ink);
-  background:radial-gradient(900px 500px at -10% -10%, #f2e6f4, transparent),
-             radial-gradient(900px 500px at 110% -10%, #f3eaf3, transparent),
-             var(--bg);
+  background:
+    radial-gradient(900px 500px at -10% -10%, #f2e6f4, transparent),
+    radial-gradient(900px 500px at 110% -10%, #f3eaf3, transparent),
+    var(--bg);
 }
 
 /* Header */
@@ -39,10 +40,7 @@ body{
   padding:14px 18px;border-radius:12px;
   font-weight:900;letter-spacing:.5px
 }
-.today-card{
-  background:#fff;border:1px solid var(--border);border-radius:12px;
-  padding:10px 14px;
-}
+.today-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 14px}
 .today-card .label{font-size:.85rem;color:var(--muted);font-weight:800}
 .today-card .date{font-weight:900}
 .right{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
@@ -62,27 +60,28 @@ body{
 .file-label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
 
 .container{max-width:1200px;margin:18px auto;padding:0 16px;display:grid;gap:16px}
-.card{
-  background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:var(--shadow)
-}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
 
+/* Gráficas más pequeñas */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.filters{display:flex;gap:10px;flex-wrap:wrap}
-.input, select{
-  padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;min-height:40px
-}
+.card.chart.small .chartbox{height:160px}
+.chartbox canvas{width:100% !important;height:100% !important}
 
+.filters{display:flex;gap:10px;flex-wrap:wrap}
+.input, select{padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:#fff;min-height:40px}
+
+/* Tabla */
 .table-responsive{overflow:auto}
 .table{width:100%;border-collapse:separate;border-spacing:0;min-width:1000px}
 .table th,.table td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
 .table thead th{background:#f4ecf4;border-bottom:2px solid var(--border)}
 .badge{padding:4px 8px;border-radius:999px;border:1px solid var(--border);font-weight:800}
 .badge.status{border:none;color:#fff}
-.status.not{background:#fb7185}       /* No iniciado */
-.status.prog{background:#f59e0b}      /* En progreso */
-.status.sub{background:#60a5fa}       /* Entregado */
-.status.grad{background:#9ca3af}      /* Calificado */
-.status.done{background:#10b981}      /* Completado */
+.status.not{background:#fb7185}   /* No iniciado */
+.status.prog{background:#f59e0b}  /* En progreso */
+.status.sub{background:#f799c2}   /* Entregado */
+.status.grad{background:#c084fc}  /* Calificado */
+.status.done{background:#10b981}  /* Completado */
 
 .priority.high{color:#fff;background:#ef4444}
 .priority.med{color:#fff;background:#f59e0b}
