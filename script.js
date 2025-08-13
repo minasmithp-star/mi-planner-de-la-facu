@@ -1,770 +1,320 @@
-/* =================== UTILIDADES =================== */
-const $ = (sel, el=document) => el.querySelector(sel);
-const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
-const clamp = (n,min,max) => Math.min(max, Math.max(min,n));
+// ===== Utilidades y estado =====
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
 const uid = () => Math.random().toString(36).slice(2,10);
-const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
-const fmtMoney = n => `$ ${Number(n||0).toFixed(2)}`;
+const fmtDate = iso => iso ? new Date(iso+"T00:00:00").toLocaleDateString(undefined,{weekday:"long",year:"numeric",month:"long",day:"numeric"}) : "—";
+const daysLeft = iso => {
+  if(!iso) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(iso+"T00:00:00");
+  return Math.round((d - today) / 86400000);
+};
+const STORAGE_KEY = "assignment_tracker_v1";
+const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+const load = () => { try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); }catch{ return null; } };
 
-/* =================== ESTADO (UNO PARA TODO) =================== */
-const STORAGE_KEY = "uni_finanzas_suite_v1";
+const DEFAULT_COURSES = ["Historia 101","Álgebra","Química","Inglés"];
+const DEFAULT_TYPES   = ["Ensayo","Tarea","Presentación","Proyecto","Examen","Laboratorio"];
+const DEFAULT_STATUSES= ["No iniciado","En progreso","Entregado","Calificado","Completado"];
+const DEFAULT_PRIOS   = ["Alta","Media","Baja"];
 
 let state = load() || {
-  // Planificador
-  planner: {
-    subjects: [],
-    tasks: [],
-    grades: {}
-  },
-  // Finanzas
-  finance: {
-    range: { from:"", to:"" },
-    rollover: 0,
-    categories: ["Bills","Expenses","Debt","Subscriptions","Savings & Investments"],
-    incomes: [],
-    expenses: []
-  }
+  courses: [...DEFAULT_COURSES],
+  assignments: [
+    // Ejemplo:
+    // { id:uid(), title:"Informe de laboratorio", course:"Química", status:"En progreso",
+    //   due:"2025-09-05", priority:"Alta", type:"Laboratorio", est:"3h", notes:"", grade:"" , done:false }
+  ]
 };
 
-function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-function load(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch{ return null; } }
-
-/* =================== NAVEGACIÓN POR PESTAÑAS =================== */
+// ===== Inicio =====
 document.addEventListener("DOMContentLoaded", ()=>{
-  $$(".tab").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      $$(".tab").forEach(b=>b.classList.remove("active"));
-      $$(".tabpanel").forEach(p=>p.classList.remove("active"));
-      btn.classList.add("active");
-      $(`#tab-${btn.dataset.tab}`).classList.add("active");
-      // redibujar gráficos si saltamos a finanzas
-      if(btn.dataset.tab === "finanzas") renderFinanceAll(true);
-    });
-  });
+  $("#todayStr").textContent = fmtDate(new Date().toISOString().slice(0,10));
+  bindGlobal();
+  renderAll();
+});
 
-  // Acciones globales
-  $("#exportBtn").addEventListener("click", exportAll);
-  $("#importInput").addEventListener("change", importAll);
+function bindGlobal(){
+  $("#addAssignBtn").addEventListener("click", ()=> openAssignModal());
+  $("#manageCoursesBtn").addEventListener("click", openCourseManager);
+  $("#exportBtn").addEventListener("click", exportJSON);
+  $("#importInput").addEventListener("change", importJSON);
   $("#resetBtn").addEventListener("click", ()=>{
     if(confirm("Esto borrará todos tus datos locales. ¿Continuar?")){
       localStorage.removeItem(STORAGE_KEY); location.reload();
     }
   });
 
-  /* ====== Inicializar módulos ====== */
-  bindPlanner();
-  bindFinance();
-  renderPlannerAll();
-  renderFinanceAll(true);
-});
-
-/* =================== PLANIFICADOR =================== */
-/* ---- helpers ---- */
-function lighten(hex, amt=0.3){
-  const c = hex.replace("#",""); const num = parseInt(c,16);
-  let r=(num>>16)&255, g=(num>>8)&255, b=num&255;
-  r = Math.round(r + (255-r)*amt); g = Math.round(g + (255-g)*amt); b = Math.round(b + (255-b)*amt);
-  return `#${[r,g,b].map(v=>v.toString(16).padStart(2,"0")).join("")}`;
-}
-function weekday(n){ return ["","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"][n] || ""; }
-function toMinutes(t){ const [h,m] = t.split(":").map(Number); return h*60+m; }
-
-/* ---- bind ---- */
-function bindPlanner(){
-  $("#addSubjectBtn").addEventListener("click", ()=> openSubjectModal());
-  $("#subjectSearch").addEventListener("input", renderSubjects);
-
-  $("#addTaskBtn").addEventListener("click", ()=> openTaskModal());
-  $("#filterStatus").addEventListener("change", renderTasks);
-  $("#filterSubject").addEventListener("change", renderTasks);
-  $("#taskSearch").addEventListener("input", renderTasks);
-
-  $("#addCategoryBtn").addEventListener("click", ()=> addCategory($("#gradeSubjectSelect").value));
+  $("#searchInput").addEventListener("input", renderTable);
+  $("#filterStatus").addEventListener("change", renderTable);
+  $("#filterPriority").addEventListener("change", renderTable);
 }
 
-/* ---- render raíz ---- */
-function renderPlannerAll(){
-  renderSubjects();
-  renderTimetable();
-  renderTaskFilters();
-  renderTasks();
-  renderGradeModule();
-  renderPlannerSummary();
+function renderAll(){
+  renderFilters();
+  renderTable();
+  renderMetrics();
+  renderCharts();
 }
 
-/* ---- resumen ---- */
-function renderPlannerSummary(){
-  const S = state.planner;
-  $("#statSubjects").textContent = S.subjects.length;
-  const pend = S.tasks.filter(t=>!t.done).length;
-  $("#statTodos").textContent = pend;
-
-  const perSubj = S.subjects.map(s => computeGradeForSubject(s.id).current || 0);
-  const avg = perSubj.length ? Math.round(perSubj.reduce((a,b)=>a+b,0)/perSubj.length) : 0;
-  $("#statAvgProgress").textContent = `${avg}%`;
-
-  const upcoming = S.tasks.filter(t=>!t.done && t.due).sort((a,b)=> new Date(a.due)-new Date(b.due))[0];
-  $("#statNextDue").textContent = upcoming ? formatDate(upcoming.due) : "—";
-}
-function formatDate(iso){
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"});
+function renderFilters(){
+  // cursos
+  const sel = $("#filterCourse");
+  sel.innerHTML = `<option value="all">Todos los cursos</option>` +
+    state.courses.map(c=>`<option value="${c}">${c}</option>`).join("");
+  sel.addEventListener("change", renderTable);
 }
 
-/* ---- asignaturas ---- */
-function renderSubjects(){
-  const list = $("#subjectList");
-  const q = ($("#subjectSearch").value || "").toLowerCase();
-  list.innerHTML = "";
+// ===== Tabla =====
+function renderTable(){
+  const tbody = $("#tbody"); tbody.innerHTML = "";
+  const q = ($("#searchInput").value||"").toLowerCase();
+  const c = $("#filterCourse").value || "all";
+  const s = $("#filterStatus").value || "all";
+  const p = $("#filterPriority").value || "all";
 
-  state.planner.subjects
-    .filter(s => s.name.toLowerCase().includes(q))
-    .forEach(subj=>{
-      const el = document.createElement("div");
-      el.className = "subject-item";
-      el.innerHTML = `
-        <div>
-          <div class="title" style="display:flex;align-items:center;gap:8px">
-            <span class="chip" style="background:${lighten(subj.color||"#8bc2ff",0.6)};border-color:${lighten(subj.color||"#8bc2ff",0.3)}">${escapeHtml(subj.name)}</span>
-          </div>
-          <div class="meta">
-            ${subj.slots?.length ? subj.slots.map(s=>`<span class="badge">${weekday(s.day)} ${s.start}-${s.end}${s.room?` · ${escapeHtml(s.room)}`:""}</span>`).join("") : '<span class="badge">Sin horarios</span>'}
-          </div>
-        </div>
-        <div class="subject-actions">
-          <button class="btn btn-ghost" data-edit="${subj.id}">Editar</button>
-          <button class="btn btn-ghost" data-delete="${subj.id}" style="color:#b42318">Eliminar</button>
-        </div>
-      `;
-      list.appendChild(el);
-
-      el.querySelector(`[data-edit="${subj.id}"]`).addEventListener("click", ()=> openSubjectModal(subj));
-      el.querySelector(`[data-delete="${subj.id}"]`).addEventListener("click", ()=>{
-        if(confirm(`¿Eliminar "${subj.name}" y datos asociados?`)){
-          state.planner.tasks = state.planner.tasks.filter(t=>t.subjectId !== subj.id);
-          delete state.planner.grades[subj.id];
-          state.planner.subjects = state.planner.subjects.filter(s=>s.id!==subj.id);
-          save(); renderPlannerAll();
-        }
-      });
-    });
-
-  if(!list.children.length){
-    list.innerHTML = `<div class="subject-item"><div class="meta">Aún no tienes asignaturas. Añade la primera 👇</div><div class="subject-actions"><button class="btn" id="firstAddSubject">Añadir</button></div></div>`;
-    $("#firstAddSubject")?.addEventListener("click", ()=>openSubjectModal());
-  }
-}
-function openSubjectModal(subj=null){
-  const isEdit = !!subj;
-  const data = subj || { id: uid(), name:"", color:"#8bc2ff", slots:[] };
-  $("#modalContent").innerHTML = `
-    <div class="form">
-      <h3>${isEdit ? "Editar asignatura" : "Nueva asignatura"}</h3>
-      <div class="row" style="grid-template-columns:1fr 160px">
-        <div><label>Nombre</label><input id="m_name" class="input" value="${escapeHtml(data.name)}" placeholder="Ej: Química Orgánica" required /></div>
-        <div><label>Color</label><input id="m_color" type="color" class="input" value="${data.color}" /></div>
-      </div>
-      <div class="row" style="grid-template-columns:1fr">
-        <label>Agregar horario</label>
-        <div class="cat-controls" style="display:flex;gap:8px;flex-wrap:wrap">
-          <select id="m_day" class="input"><option value="1">Lunes</option><option value="2">Martes</option><option value="3">Miércoles</option><option value="4">Jueves</option><option value="5">Viernes</option><option value="6">Sábado</option></select>
-          <input id="m_start" type="time" class="input" />
-          <input id="m_end" type="time" class="input" />
-          <input id="m_room" class="input" placeholder="Sala (opcional)" />
-          <button id="m_addSlot" class="btn">Añadir</button>
-        </div>
-      </div>
-      <div id="m_slots" class="subject-list"></div>
-    </div>
-    <div class="actions">
-      <button value="cancel" class="btn btn-ghost">Cancelar</button>
-      <button id="m_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
-    </div>
-  `;
-
-  const renderSlots = ()=>{
-    const cont = $("#m_slots");
-    cont.innerHTML = data.slots.map((s,i)=>`
-      <div class="subject-item">
-        <div class="meta"><span class="badge">${weekday(s.day)} ${s.start}-${s.end}${s.room?` · ${escapeHtml(s.room)}`:""}</span></div>
-        <div class="subject-actions"><button class="btn btn-ghost" data-rm="${i}" style="color:#b42318">Quitar</button></div>
-      </div>
-    `).join("");
-    $$("#m_slots [data-rm]").forEach(btn=>{
-      btn.addEventListener("click",()=>{ data.slots.splice(+btn.dataset.rm,1); renderSlots(); });
-    });
-  };
-  renderSlots();
-
-  $("#m_addSlot").addEventListener("click",(e)=>{
-    e.preventDefault();
-    const day = +$("#m_day").value, start=$("#m_start").value, end=$("#m_end").value;
-    if(!start || !end) return alert("Completa inicio y fin.");
-    data.slots.push({day,start,end,room:$("#m_room").value.trim()});
-    $("#m_start").value=""; $("#m_end").value=""; $("#m_room").value="";
-    renderSlots();
-  });
-
-  $("#m_save").addEventListener("click",(e)=>{
-    e.preventDefault();
-    data.name = $("#m_name").value.trim();
-    data.color = $("#m_color").value;
-    if(!data.name) return alert("Pon un nombre.");
-    if(isEdit){
-      const i = state.planner.subjects.findIndex(s=>s.id===data.id);
-      state.planner.subjects[i] = data;
-    } else {
-      state.planner.subjects.push(data);
-    }
-    save(); $("#modal").close(); renderPlannerAll();
-  });
-
-  $("#modal").showModal();
-}
-
-/* ---- horario ---- */
-function renderTimetable(){
-  const grid = $("#timetableGrid");
-  grid.innerHTML = "";
-  const hours = Array.from({length:14}, (_,i)=>i+8); // 08..21
-  hours.forEach(h=>{
-    const hh = String(h).padStart(2,"0")+":00";
-    const timeCell = document.createElement("div");
-    timeCell.className="time-cell"; timeCell.textContent = hh;
-    grid.appendChild(timeCell);
-
-    for(let d=1; d<=6; d++){
-      const slotCell = document.createElement("div"); slotCell.className="slot"; grid.appendChild(slotCell);
-      state.planner.subjects.forEach(s=>{
-        (s.slots||[]).forEach(sl=>{
-          if(sl.day!==d) return;
-          const startMin = toMinutes(sl.start), endMin = toMinutes(sl.end);
-          if(startMin < (h+1)*60 && endMin > h*60){
-            const topMin = Math.max(0, startMin - h*60);
-            const blockMin = Math.min(60, endMin - h*60);
-            const b = document.createElement("div");
-            b.className="block";
-            b.style.background = `linear-gradient(180deg, ${lighten(s.color||"#4da3ff",0.25)}, ${s.color||"#4da3ff"})`;
-            b.style.top = `${(topMin/60)*48}px`;
-            b.style.height = `${(blockMin/60)*48}px`;
-            b.innerHTML = `${escapeHtml(s.name)}<div class="small">${sl.start}–${sl.end}${sl.room?` · ${escapeHtml(sl.room)}`:""}</div>`;
-            slotCell.appendChild(b);
-          }
-        });
-      });
-    }
-  });
-}
-
-/* ---- tareas ---- */
-function renderTaskFilters(){
-  const sel = $("#filterSubject");
-  sel.innerHTML = `<option value="all">Todas las asignaturas</option>` +
-    state.planner.subjects.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
-}
-function renderTasks(){
-  const list = $("#taskList");
-  list.innerHTML = "";
-  const S = state.planner;
-  const status = $("#filterStatus").value || "all";
-  const subj = $("#filterSubject").value || "all";
-  const query = ($("#taskSearch").value || "").toLowerCase();
-
-  const tasks = S.tasks
-    .filter(t => status==="all" ? true : status==="open" ? !t.done : t.done)
-    .filter(t => subj==="all" ? true : t.subjectId===subj)
-    .filter(t => (t.title.toLowerCase().includes(query) || (t.tag||"").toLowerCase().includes(query)))
+  const items = state.assignments
+    .filter(a => c==="all" ? true : a.course===c)
+    .filter(a => s==="all" ? true : a.status===s)
+    .filter(a => p==="all" ? true : a.priority===p)
+    .filter(a => (a.title||"").toLowerCase().includes(q) || (a.notes||"").toLowerCase().includes(q))
     .sort((a,b)=>{
       const da = a.due ? new Date(a.due) : new Date("2999-01-01");
       const db = b.due ? new Date(b.due) : new Date("2999-01-01");
       return da - db;
     });
 
-  tasks.forEach(t=>{
-    const s = S.subjects.find(x=>x.id===t.subjectId);
-    const el = document.createElement("div");
-    el.className="task";
-    el.innerHTML = `
-      <div>
-        <div class="task-title ${t.done?'done':''}">${escapeHtml(t.title)}</div>
-        <div class="meta">
-          ${s? `<span class="badge">${escapeHtml(s.name)}</span>` : `<span class="badge">General</span>`}
-          ${t.due? `<span class="badge">${formatDate(t.due)}</span>`:""}
-          <span class="badge ${t.priority==='alta'?'red':t.priority==='baja'?'':'green'}">${t.priority}</span>
-          ${t.tag? `<span class="badge">#${escapeHtml(t.tag)}</span>`:""}
-        </div>
-      </div>
-      <div class="subject-actions">
-        <button class="btn btn-ghost" data-toggle="${t.id}">${t.done?'Reabrir':'Completar'}</button>
-        <button class="btn btn-ghost" data-edit="${t.id}">Editar</button>
-        <button class="btn btn-ghost" style="color:#b42318" data-del="${t.id}">Eliminar</button>
-      </div>
+  items.forEach(a=>{
+    const tr = document.createElement("tr");
+    const dleft = daysLeft(a.due);
+    tr.innerHTML = `
+      <td><input type="checkbox" ${a.status==="Completado"?"checked":""} data-done="${a.id}" title="Marcar completado" /></td>
+      <td>${escape(a.title)}</td>
+      <td>${escape(a.course||"—")}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td>${a.due||"—"}</td>
+      <td>${daysPill(dleft)}</td>
+      <td>${prioBadge(a.priority)}</td>
+      <td>${escape(a.type||"—")}</td>
+      <td>${escape(a.est||"—")}</td>
+      <td>${escape(a.notes||"")}</td>
+      <td>${escape(a.grade||"")}</td>
+      <td class="actions-row">
+        <span class="link" data-edit="${a.id}">Editar</span> ·
+        <span class="link" data-del="${a.id}">Eliminar</span>
+      </td>
     `;
-    list.appendChild(el);
-    el.querySelector(`[data-toggle="${t.id}"]`).addEventListener("click", ()=>{ t.done=!t.done; save(); renderPlannerAll(); });
-    el.querySelector(`[data-edit="${t.id}"]`).addEventListener("click", ()=> openTaskModal(t));
-    el.querySelector(`[data-del="${t.id}"]`).addEventListener("click", ()=>{
-      if(confirm(`¿Eliminar tarea "${t.title}"?`)){
-        state.planner.tasks = S.tasks.filter(x=>x.id!==t.id);
-        save(); renderPlannerAll();
+    tbody.appendChild(tr);
+
+    tr.querySelector(`[data-done="${a.id}"]`).addEventListener("change",(e)=>{
+      a.status = e.target.checked ? "Completado" : "No iniciado";
+      save(); renderAll();
+    });
+    tr.querySelector(`[data-edit="${a.id}"]`).addEventListener("click", ()=> openAssignModal(a));
+    tr.querySelector(`[data-del="${a.id}"]`).addEventListener("click", ()=>{
+      if(confirm("¿Eliminar tarea?")){
+        state.assignments = state.assignments.filter(x=>x.id!==a.id);
+        save(); renderAll();
       }
     });
   });
 
-  if(!tasks.length){
-    list.innerHTML = `<div class="task"><div class="meta">No hay tareas que coincidan con el filtro.</div></div>`;
+  if(!items.length){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="12" style="color:#777">No hay tareas con esos filtros.</td>`;
+    tbody.appendChild(tr);
   }
 }
-function openTaskModal(task=null){
-  const S = state.planner;
-  const data = task || { id: uid(), title:"", subjectId:"", due:"", priority:"media", tag:"", done:false };
-  const isEdit = !!task;
-  const subjectsOpts = S.subjects.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("");
+
+function statusBadge(st){
+  const map = {
+    "No iniciado":"not","En progreso":"prog","Entregado":"sub","Calificado":"grad","Completado":"done"
+  };
+  const key = map[st] || "not";
+  return `<span class="badge status ${key}">${st||"No iniciado"}</span>`;
+}
+function prioBadge(p){
+  const key = p==="Alta" ? "high" : p==="Media" ? "med" : "low";
+  return `<span class="badge priority ${key}">${p||"—"}</span>`;
+}
+function daysPill(n){
+  if(n===null) return "—";
+  if(n<0) return `<span class="days bad">${n}</span>`;
+  if(n<=2) return `<span class="days warn">${n}</span>`;
+  return `<span class="days ok">${n}</span>`;
+}
+function escape(s){ return (s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
+
+// ===== Formularios =====
+function openAssignModal(item=null){
+  const isEdit = !!item;
+  const data = item || {
+    id: uid(), title:"", course: state.courses[0]||"", status:"No iniciado", due:"",
+    priority:"Media", type: DEFAULT_TYPES[0], est:"", notes:"", grade:""
+  };
+
+  const courseOpts = state.courses.map(c=>`<option ${c===data.course?"selected":""}>${c}</option>`).join("");
+  const statusOpts = DEFAULT_STATUSES.map(s=>`<option ${s===data.status?"selected":""}>${s}</option>`).join("");
+  const prioOpts   = DEFAULT_PRIOS.map(s=>`<option ${s===data.priority?"selected":""}>${s}</option>`).join("");
+  const typeOpts   = DEFAULT_TYPES.map(s=>`<option ${s===data.type?"selected":""}>${s}</option>`).join("");
 
   $("#modalContent").innerHTML = `
     <div class="form">
       <h3>${isEdit?"Editar tarea":"Nueva tarea"}</h3>
-      <div class="row"><label>Título</label><input id="t_title" class="input" value="${escapeHtml(data.title)}" placeholder="Ej: Informe laboratorio 2" required /></div>
-      <div class="row" style="grid-template-columns:1fr 1fr">
-        <div><label>Asignatura</label><select id="t_subject" class="input"><option value="">General</option>${subjectsOpts}</select></div>
-        <div><label>Entrega</label><input id="t_due" type="date" class="input" value="${data.due||""}" /></div>
+      <div><label>Título</label><input id="a_title" class="input" value="${escape(data.title)}" placeholder="Ej: Ensayo de 5 páginas" /></div>
+      <div class="grid-3">
+        <div><label>Curso</label><select id="a_course" class="input">${courseOpts}</select></div>
+        <div><label>Estado</label><select id="a_status" class="input">${statusOpts}</select></div>
+        <div><label>Fecha límite</label><input id="a_due" type="date" class="input" value="${data.due||""}" /></div>
       </div>
-      <div class="row" style="grid-template-columns:1fr 1fr">
-        <div><label>Prioridad</label>
-          <select id="t_priority" class="input">
-            <option value="alta" ${data.priority==="alta"?"selected":""}>Alta</option>
-            <option value="media" ${data.priority==="media"?"selected":""}>Media</option>
-            <option value="baja" ${data.priority==="baja"?"selected":""}>Baja</option>
-          </select>
-        </div>
-        <div><label>Etiqueta</label><input id="t_tag" class="input" value="${escapeHtml(data.tag||"")}" placeholder="Ej: lab, lectura..." /></div>
+      <div class="grid-3">
+        <div><label>Prioridad</label><select id="a_prio" class="input">${prioOpts}</select></div>
+        <div><label>Tipo</label><select id="a_type" class="input">${typeOpts}</select></div>
+        <div><label>Tiempo estimado</label><input id="a_est" class="input" value="${escape(data.est||"")}" placeholder="Ej: 3h, 45m" /></div>
       </div>
+      <div><label>Notas</label><input id="a_notes" class="input" value="${escape(data.notes||"")}" /></div>
+      <div><label>Calificación (A–F o número)</label><input id="a_grade" class="input" value="${escape(data.grade||"")}" /></div>
     </div>
     <div class="actions">
       <button value="cancel" class="btn btn-ghost">Cancelar</button>
-      <button id="t_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
+      <button id="a_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
     </div>
   `;
-  $("#t_subject").value = data.subjectId || "";
-  $("#t_save").addEventListener("click",(e)=>{
+
+  $("#a_save").addEventListener("click",(e)=>{
     e.preventDefault();
-    data.title = $("#t_title").value.trim();
-    data.subjectId = $("#t_subject").value || null;
-    data.due = $("#t_due").value || "";
-    data.priority = $("#t_priority").value;
-    data.tag = $("#t_tag").value.trim();
-    if(!data.title) return alert("Ponle un título.");
+    data.title = $("#a_title").value.trim();
+    data.course= $("#a_course").value;
+    data.status= $("#a_status").value;
+    data.due   = $("#a_due").value || "";
+    data.priority = $("#a_prio").value;
+    data.type  = $("#a_type").value;
+    data.est   = $("#a_est").value.trim();
+    data.notes = $("#a_notes").value.trim();
+    data.grade = $("#a_grade").value.trim();
+
+    if(!data.title) return alert("Escribe un título.");
     if(isEdit){
-      const i = S.tasks.findIndex(x=>x.id===data.id);
-      S.tasks[i]=data;
-    } else {
-      S.tasks.push(data);
-    }
-    save(); $("#modal").close(); renderPlannerAll();
-  });
-  $("#modal").showModal();
-}
-
-/* ---- notas ---- */
-function renderGradeModule(){
-  const sel = $("#gradeSubjectSelect");
-  const S = state.planner;
-  sel.innerHTML = S.subjects.length
-    ? S.subjects.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")
-    : `<option value="">(Agrega asignaturas para gestionar notas)</option>`;
-  sel.onchange = renderCategories;
-  renderCategories();
-}
-function renderCategories(){
-  const subjId = $("#gradeSubjectSelect").value;
-  const list = $("#categoryList");
-  list.innerHTML = "";
-  if(!subjId){ updateGradeSummary(0,0); return; }
-
-  const items = state.planner.grades[subjId] || [];
-  items.forEach(cat=>{
-    const row = document.createElement("div");
-    row.className = "category";
-    row.innerHTML = `
-      <div class="cat-name">${escapeHtml(cat.name)}</div>
-      <div class="cat-controls"><label>Peso (%)</label><input type="number" class="input" min="0" max="100" step="1" value="${cat.weight}" data-w="${cat.id}" /></div>
-      <div class="cat-controls"><label>Nota (%)</label><input type="number" class="input" min="0" max="100" step="0.1" value="${cat.score}" data-s="${cat.id}" /></div>
-      <div class="cat-controls">
-        <button class="btn btn-ghost" data-edit="${cat.id}">Renombrar</button>
-        <button class="btn btn-ghost" style="color:#b42318" data-del="${cat.id}">Eliminar</button>
-      </div>
-    `;
-    list.appendChild(row);
-    row.querySelector(`[data-w="${cat.id}"]`).addEventListener("input",(e)=>{ cat.weight = clamp(parseFloat(e.target.value||0),0,100); save(); updateSubjectGrade(subjId); });
-    row.querySelector(`[data-s="${cat.id}"]`).addEventListener("input",(e)=>{ cat.score = clamp(parseFloat(e.target.value||0),0,100); save(); updateSubjectGrade(subjId); });
-    row.querySelector(`[data-del="${cat.id}"]`).addEventListener("click",()=>{
-      if(confirm("¿Eliminar categoría?")){
-        state.planner.grades[subjId] = (state.planner.grades[subjId]||[]).filter(x=>x.id!==cat.id);
-        save(); renderCategories(); renderPlannerSummary();
-      }
-    });
-    row.querySelector(`[data-edit="${cat.id}"]`).addEventListener("click",()=>{
-      const name = prompt("Nuevo nombre de categoría:", cat.name);
-      if(name!==null){
-        cat.name = name.trim() || cat.name;
-        save(); renderCategories(); renderPlannerSummary();
-      }
-    });
-  });
-
-  updateSubjectGrade(subjId);
-  if(!items.length){
-    list.innerHTML = `<div class="category"><div class="cat-name">Sin categorías</div><div class="cat-controls">Añade la primera 👇</div></div>`;
-  }
-}
-function addCategory(subjId){
-  if(!subjId) return;
-  const name = prompt("Nombre de la categoría (ej: Controles, Laboratorio, Examen):");
-  if(!name) return;
-  const obj = { id: uid(), name: name.trim(), weight: 0, score: 0 };
-  state.planner.grades[subjId] = state.planner.grades[subjId] || [];
-  state.planner.grades[subjId].push(obj);
-  save(); renderCategories(); renderPlannerSummary();
-}
-function computeGradeForSubject(subjId){
-  const cats = state.planner.grades[subjId] || [];
-  const usedWeight = Math.round(cats.reduce((s,c)=> s + (Number(c.weight)||0), 0));
-  const current = Math.round(cats.reduce((s,c)=> s + ((Number(c.weight)||0)*(Number(c.score)||0)/100), 0));
-  return {current, usedWeight};
-}
-function updateSubjectGrade(subjId){
-  const {current, usedWeight} = computeGradeForSubject(subjId);
-  updateGradeSummary(current, usedWeight);
-  renderPlannerSummary();
-}
-function updateGradeSummary(current, usedWeight){
-  $("#currentGrade").textContent = `${clamp(current,0,100).toFixed(0)}%`;
-  $("#usedWeight").textContent = `${usedWeight}%`;
-  $("#gradeProgressBar").style.width = `${clamp(current,0,100)}%`;
-}
-
-/* =================== FINANZAS =================== */
-const F = ()=> state.finance;
-let pieChart, barChart;
-
-function bindFinance(){
-  $("#applyRange").addEventListener("click", ()=>{
-    F().range.from = $("#fromDate").value || "";
-    F().range.to = $("#toDate").value || "";
-    F().rollover = Number($("#rollover").value || 0);
-    save(); renderFinanceAll(true);
-  });
-  $("#addIncomeBtn").addEventListener("click", ()=> openIncomeModal());
-  $("#addExpenseBtn").addEventListener("click", ()=> openExpenseModal());
-  $("#manageCatsBtn").addEventListener("click", openCategoryManager);
-  renderCategoryFilter();
-
-  // set inputs iniciales
-  $("#fromDate").value = F().range.from || "";
-  $("#toDate").value = F().range.to || "";
-  $("#rollover").value = F().rollover || 0;
-}
-
-function renderFinanceAll(redrawCharts=false){
-  renderIncomes();
-  renderExpenses();
-  renderCashflow();
-  if(redrawCharts) renderCharts();
-}
-
-function inRange(dateISO){
-  const {from,to} = F().range;
-  if(!from && !to) return true;
-  const d = new Date(dateISO);
-  if(from && d < new Date(from)) return false;
-  if(to && d > new Date(to)) return false;
-  return true;
-}
-
-function renderCategoryFilter(){
-  const sel = $("#categoryFilter");
-  sel.innerHTML = `<option value="all">Todas las categorías</option>` + F().categories.map(c=>`<option value="${c}">${c}</option>`).join("");
-  sel.onchange = renderExpenses;
-}
-
-/* ---- ingresos ---- */
-function renderIncomes(){
-  const body = $("#incomeBody");
-  body.innerHTML = "";
-  const items = F().incomes.filter(i=>inRange(i.date)).sort((a,b)=> new Date(a.date)-new Date(b.date));
-  let total = 0;
-  items.forEach(it=>{
-    total += Number(it.amount||0);
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${it.date||""}</td>
-      <td>${escapeHtml(it.source||"")}</td>
-      <td>${fmtMoney(it.amount)}</td>
-      <td><span class="action-link" data-edit="${it.id}">Editar</span> · <span class="action-link" data-del="${it.id}">Eliminar</span></td>
-    `;
-    body.appendChild(tr);
-    tr.querySelector(`[data-edit="${it.id}"]`).addEventListener("click", ()=> openIncomeModal(it));
-    tr.querySelector(`[data-del="${it.id}"]`).addEventListener("click", ()=>{
-      if(confirm("¿Eliminar ingreso?")){
-        F().incomes = F().incomes.filter(x=>x.id!==it.id);
-        save(); renderFinanceAll(true);
-      }
-    });
-  });
-  $("#incomeTotal").textContent = fmtMoney(total);
-}
-function openIncomeModal(item=null){
-  const data = item || { id: uid(), date:"", source:"", amount:0 };
-  const isEdit = !!item;
-  $("#modalContent").innerHTML = `
-    <div class="form">
-      <h3>${isEdit?"Editar ingreso":"Nuevo ingreso"}</h3>
-      <div class="grid-2">
-        <div><label>Fecha</label><input id="i_date" type="date" class="input" value="${data.date}"/></div>
-        <div><label>Monto</label><input id="i_amount" type="number" step="0.01" class="input" value="${data.amount}"/></div>
-      </div>
-      <div><label>Fuente</label><input id="i_source" class="input" placeholder="Ej: Beca, Trabajo" value="${escapeHtml(data.source)}"/></div>
-    </div>
-    <div class="actions">
-      <button value="cancel" class="btn btn-ghost">Cancelar</button>
-      <button id="i_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
-    </div>
-  `;
-  $("#i_save").addEventListener("click",(e)=>{
-    e.preventDefault();
-    data.date = $("#i_date").value;
-    data.amount = Number($("#i_amount").value||0);
-    data.source = $("#i_source").value.trim();
-    if(!data.date) return alert("Selecciona una fecha.");
-    if(isEdit){
-      const i = F().incomes.findIndex(x=>x.id===data.id);
-      F().incomes[i]=data;
+      const i = state.assignments.findIndex(x=>x.id===data.id);
+      state.assignments[i] = data;
     }else{
-      F().incomes.push(data);
+      state.assignments.push(data);
     }
-    save(); $("#modal").close(); renderFinanceAll(true);
+    save(); $("#modal").close(); renderAll();
   });
+
   $("#modal").showModal();
 }
 
-/* ---- gastos ---- */
-function renderExpenses(){
-  const body = $("#expenseBody"); body.innerHTML = "";
-  const catFilter = $("#categoryFilter").value || "all";
-  const items = F().expenses
-    .filter(e=>inRange(e.date))
-    .filter(e=> catFilter==="all" ? true : e.category===catFilter)
-    .sort((a,b)=> new Date(a.date)-new Date(b.date));
-
-  let budgetSum = 0, actualSum = 0;
-  items.forEach(it=>{
-    budgetSum += Number(it.budget||0);
-    actualSum += Number(it.actual||0);
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${it.date||""}</td>
-      <td><span class="badge">${escapeHtml(it.category)}</span></td>
-      <td>${escapeHtml(it.desc||"")}</td>
-      <td>${fmtMoney(it.budget)}</td>
-      <td>${fmtMoney(it.actual)}</td>
-      <td><span class="action-link" data-edit="${it.id}">Editar</span> · <span class="action-link" data-del="${it.id}">Eliminar</span></td>
-    `;
-    body.appendChild(tr);
-    tr.querySelector(`[data-edit="${it.id}"]`).addEventListener("click", ()=> openExpenseModal(it));
-    tr.querySelector(`[data-del="${it.id}"]`).addEventListener("click", ()=>{
-      if(confirm("¿Eliminar gasto?")){
-        F().expenses = F().expenses.filter(x=>x.id!==it.id);
-        save(); renderFinanceAll(true);
-      }
-    });
-  });
-
-  $("#budgetTotal").textContent = fmtMoney(budgetSum);
-  $("#actualTotal").textContent = fmtMoney(actualSum);
-}
-function openExpenseModal(item=null){
-  const data = item || { id: uid(), date:"", category:F().categories[0]||"Expenses", desc:"", budget:0, actual:0 };
-  const isEdit = !!item;
-  const options = F().categories.map(c=>`<option ${c===data.category?"selected":""}>${c}</option>`).join("");
-  $("#modalContent").innerHTML = `
-    <div class="form">
-      <h3>${isEdit?"Editar gasto":"Nuevo gasto"}</h3>
-      <div class="grid-2">
-        <div><label>Fecha</label><input id="e_date" type="date" class="input" value="${data.date}"/></div>
-        <div><label>Categoría</label><select id="e_cat" class="input">${options}</select></div>
-      </div>
-      <div><label>Descripción</label><input id="e_desc" class="input" value="${escapeHtml(data.desc)}" placeholder="Ej: Libros, Comida, Internet"/></div>
-      <div class="grid-2">
-        <div><label>Presupuesto</label><input id="e_budget" type="number" step="0.01" class="input" value="${data.budget}"/></div>
-        <div><label>Real</label><input id="e_actual" type="number" step="0.01" class="input" value="${data.actual}"/></div>
-      </div>
-    </div>
-    <div class="actions">
-      <button value="cancel" class="btn btn-ghost">Cancelar</button>
-      <button id="e_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
-    </div>
-  `;
-  $("#e_save").addEventListener("click",(e)=>{
-    e.preventDefault();
-    data.date = $("#e_date").value;
-    data.category = $("#e_cat").value;
-    data.desc = $("#e_desc").value.trim();
-    data.budget = Number($("#e_budget").value||0);
-    data.actual = Number($("#e_actual").value||0);
-    if(!data.date) return alert("Selecciona una fecha.");
-    if(isEdit){
-      const i = F().expenses.findIndex(x=>x.id===data.id);
-      F().expenses[i]=data;
-    }else{
-      F().expenses.push(data);
-    }
-    save(); $("#modal").close(); renderFinanceAll(true);
-  });
-  $("#modal").showModal();
-}
-
-/* ---- categorías ---- */
-function openCategoryManager(){
-  const listHtml = F().categories.map((c,i)=>`
-    <div class="row" style="grid-template-columns:1fr auto;align-items:center">
-      <input class="input cat-input" data-i="${i}" value="${escapeHtml(c)}" />
+function openCourseManager(){
+  const listHtml = state.courses.map((c,i)=>`
+    <div class="grid-3" style="grid-template-columns:1fr auto auto;align-items:center">
+      <input class="input course-input" data-i="${i}" value="${escape(c)}" />
+      <button class="btn btn-ghost" data-up="${i}">↑</button>
       <button class="btn btn-ghost" data-del="${i}" style="color:#c026d3">Eliminar</button>
     </div>
   `).join("");
 
   $("#modalContent").innerHTML = `
     <div class="form">
-      <h3>Categorías</h3>
-      <div id="catList">${listHtml||'<small>No hay categorías</small>'}</div>
-      <div class="row" style="grid-template-columns:1fr auto;align-items:center">
-        <input id="newCat" class="input" placeholder="Nueva categoría" />
-        <button id="addCat" class="btn">Añadir</button>
+      <h3>Cursos</h3>
+      <div id="courseList">${listHtml||'<small>No hay cursos</small>'}</div>
+      <div class="grid-3" style="grid-template-columns:1fr auto auto;align-items:center">
+        <input id="newCourse" class="input" placeholder="Nuevo curso" />
+        <button id="addCourse" class="btn">Añadir</button>
+        <button value="cancel" class="btn btn-ghost" onclick="document.getElementById('modal').close()">Cerrar</button>
       </div>
     </div>
     <div class="actions">
-      <button value="cancel" class="btn btn-ghost">Cerrar</button>
-      <button id="saveCats" class="btn">Guardar</button>
+      <button id="saveCourses" class="btn">Guardar cambios</button>
     </div>
   `;
 
-  $("#addCat").addEventListener("click", ()=>{
-    const v = $("#newCat").value.trim();
-    if(!v) return;
-    F().categories.push(v);
-    save(); $("#modal").close(); openCategoryManager();
+  $("#addCourse").addEventListener("click", ()=>{
+    const v = $("#newCourse").value.trim(); if(!v) return;
+    state.courses.push(v); save(); $("#modal").close(); openCourseManager();
   });
 
-  $$("#catList [data-del]").forEach(btn=>{
+  $$("#courseList [data-del]").forEach(btn=>{
     btn.addEventListener("click", ()=>{
-      const idx = Number(btn.getAttribute("data-del"));
-      const cat = F().categories[idx];
-      F().expenses.forEach(e=>{ if(e.category===cat) e.category="Expenses"; });
-      F().categories.splice(idx,1);
-      save(); $("#modal").close(); openCategoryManager();
+      const idx = Number(btn.dataset.del);
+      const name = state.courses[idx];
+      // Reasignar tareas con ese curso a vacío
+      state.assignments.forEach(a=>{ if(a.course===name) a.course=""; });
+      state.courses.splice(idx,1); save(); $("#modal").close(); openCourseManager();
     });
   });
 
-  $("#saveCats").addEventListener("click", ()=>{
-    $$(".cat-input").forEach(inp=>{
-      const i = Number(inp.getAttribute("data-i"));
-      const old = F().categories[i];
-      const val = inp.value.trim() || old;
-      F().expenses.forEach(e=>{ if(e.category===old) e.category = val; });
-      F().categories[i] = val;
+  $$("#courseList [data-up]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const i = Number(btn.dataset.up);
+      if(i>0){ [state.courses[i-1], state.courses[i]] = [state.courses[i], state.courses[i-1]]; save(); $("#modal").close(); openCourseManager(); }
     });
-    save(); $("#modal").close(); renderCategoryFilter(); renderFinanceAll(true);
+  });
+
+  $("#saveCourses").addEventListener("click", ()=>{
+    $$(".course-input").forEach(inp=>{
+      const i = Number(inp.dataset.i);
+      const old = state.courses[i];
+      const val = inp.value.trim() || old;
+      state.assignments.forEach(a=>{ if(a.course===old) a.course = val; });
+      state.courses[i] = val;
+    });
+    save(); $("#modal").close(); renderAll();
   });
 
   $("#modal").showModal();
 }
 
-/* ---- resumen finanzas ---- */
-function sumByCategory(kind="budget"){
-  const map = {};
-  F().categories.forEach(c=>map[c]=0);
-  F().expenses.filter(inRange).forEach(e=>{
-    map[e.category] = (map[e.category]||0) + Number(e[kind]||0);
-  });
-  return map;
-}
-function renderCashflow(){
-  const body = $("#cashflowBody"); body.innerHTML = "";
-
-  const income = F().incomes.filter(inRange).reduce((s,i)=> s + Number(i.amount||0), 0);
-  const budgetByCat = sumByCategory("budget");
-  const actualByCat = sumByCategory("actual");
-
-  const mkRow = (label, b, a) => `<tr><td>${label}</td><td>${fmtMoney(b)}</td><td>${fmtMoney(a)}</td></tr>`;
-
-  let budgetIncome = F().rollover + income;
-  let actualIncome = F().rollover + income;
-  let budgetExpenses = 0, actualExpenses = 0;
-
-  const blocks = ["Bills","Expenses","Debt","Subscriptions","Savings & Investments"];
-  const extraCats = F().categories.filter(c=>!blocks.includes(c));
-
-  body.insertAdjacentHTML("beforeend", mkRow("+ Rollover", F().rollover, F().rollover));
-  body.insertAdjacentHTML("beforeend", mkRow("Ingresos", income, income));
-  blocks.forEach(cat=>{
-    body.insertAdjacentHTML("beforeend", mkRow(cat, budgetByCat[cat]||0, actualByCat[cat]||0));
-    budgetExpenses += budgetByCat[cat]||0; actualExpenses += actualByCat[cat]||0;
-  });
-  extraCats.forEach(cat=>{
-    body.insertAdjacentHTML("beforeend", mkRow(cat, budgetByCat[cat]||0, actualByCat[cat]||0));
-    budgetExpenses += budgetByCat[cat]||0; actualExpenses += actualByCat[cat]||0;
-  });
-
-  $("#leftBudget").textContent = fmtMoney(budgetIncome - budgetExpenses);
-  $("#leftActual").textContent  = fmtMoney(actualIncome - actualExpenses);
+// ===== Métricas y gráficos =====
+function renderMetrics(){
+  const total = state.assignments.length;
+  const done  = state.assignments.filter(a=>a.status==="Completado").length;
+  $("#totalCount").textContent = total;
+  $("#doneCount").textContent  = done;
 }
 
-/* ---- gráficos ---- */
+let pieChart, barChart;
 function renderCharts(){
-  const budgetByCat = sumByCategory("budget");
-  const actualByCat = sumByCategory("actual");
-  const labels = F().categories;
+  // Pie: Completadas vs No iniciadas
+  const done = state.assignments.filter(a=>a.status==="Completado").length;
+  const notStarted = state.assignments.filter(a=>a.status==="No iniciado").length;
 
-  const pieData = labels.map(l => actualByCat[l]||0);
-  const barBudget = labels.map(l => budgetByCat[l]||0);
-  const barActual = labels.map(l => actualByCat[l]||0);
-
-  // Pie
-  const pieCtx = $("#pieSpending");
   if(pieChart) pieChart.destroy();
-  pieChart = new Chart(pieCtx, {
+  pieChart = new Chart($("#pieDone"), {
     type:"pie",
-    data:{ labels, datasets:[{ data: pieData }] },
+    data:{ labels:["Completadas","No iniciadas"], datasets:[{ data:[done, notStarted] }]},
     options:{ plugins:{ legend:{ position:"bottom" } } }
   });
 
-  // Barras
-  const barCtx = $("#barBudgetActual");
+  // Barras: distribución A–F de campo grade (se toma primera letra)
+  const letters = ["A","B","C","D","F"];
+  const counts = letters.map(L => state.assignments.filter(a=>(a.grade||"").trim().toUpperCase().startsWith(L)).length);
   if(barChart) barChart.destroy();
-  barChart = new Chart(barCtx, {
+  barChart = new Chart($("#barGrades"), {
     type:"bar",
-    data:{ labels, datasets:[{label:"Presupuesto", data:barBudget},{label:"Real", data:barActual}] },
-    options:{ responsive:true, scales:{ y:{ beginAtZero:true } }, plugins:{ legend:{ position:"bottom" } } }
+    data:{ labels:letters, datasets:[{ label:"Cantidad", data:counts }]},
+    options:{ scales:{ y:{ beginAtZero:true, precision:0 } }, plugins:{ legend:{ display:false } } }
   });
 }
 
-/* =================== IMPORT/EXPORT GLOBAL =================== */
-function exportAll(){
+// ===== Importar / Exportar =====
+function exportJSON(){
   const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "planificador_universidad_finanzas.json";
+  a.href = url; a.download = "assignment_tracker.json";
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-function importAll(e){
+function importJSON(e){
   const file = e.target.files[0]; if(!file) return;
   const reader = new FileReader();
   reader.onload = ()=>{
     try{
       const data = JSON.parse(reader.result);
-      if(!data || !("planner" in data && "finance" in data)) throw new Error("Formato inválido.");
-      state = {...state, ...data};
-      save(); location.reload();
+      if(!data || !("assignments" in data && "courses" in data)) throw new Error("Formato inválido.");
+      state = {...state, ...data}; save(); location.reload();
     }catch(err){ alert("No se pudo importar: " + err.message); }
   };
   reader.readAsText(file);
