@@ -32,15 +32,15 @@
 </header>
 
 <main class="container">
-  <!-- Gráficos -->
+  <!-- Gráficas (más pequeñas) -->
   <section class="grid-2">
-    <div class="card">
-      <h3>Completadas vs No iniciadas</h3>
-      <canvas id="pieDone" height="220"></canvas>
+    <div class="card chart small">
+      <h3>Estados de las tareas</h3>
+      <div class="chartbox"><canvas id="pieStatus"></canvas></div>
     </div>
-    <div class="card">
-      <h3>Distribución de calificaciones</h3>
-      <canvas id="barGrades" height="220"></canvas>
+    <div class="card chart small">
+      <h3>Distribución de notas (1–10)</h3>
+      <div class="chartbox"><canvas id="barGrades"></canvas></div>
     </div>
   </section>
 
@@ -82,7 +82,7 @@
             <th>Tipo</th>
             <th>Tiempo est.</th>
             <th>Notas</th>
-            <th>Calificación</th>
+            <th>Calificación (1–10)</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -92,7 +92,7 @@
   </section>
 </main>
 
-<!-- Modal genérico -->
+<!-- Modal -->
 <dialog id="modal" class="modal">
   <form method="dialog" class="modal-box" id="modalContent"></form>
 </dialog>
