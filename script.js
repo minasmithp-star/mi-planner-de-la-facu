@@ -1,20 +1,19 @@
-/* ========= Utilidades y estado ========= */
+/* ========== Utilidades y estado ========== */
 const $  = (s, el=document) => el.querySelector(s);
 const $$ = (s, el=document) => Array.from(el.querySelectorAll(s));
 const uid = () => Math.random().toString(36).slice(2,10);
 
-// Fecha “HOY” con año de 2 dígitos (auto)
+// HOY (año 2 dígitos)
 const fmtToday2Y = iso => {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("es", {weekday:"long", day:"2-digit", month:"long", year:"2-digit"});
 };
-// Fecha corta DD/MM/YY para la tabla
+// Fecha corta DD/MM/YY
 const fmtShort2Y = iso => {
   if(!iso) return "—";
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("es",{day:"2-digit",month:"2-digit",year:"2-digit"});
 };
-
 const daysLeft = iso => {
   if(!iso) return null;
   const today = new Date(); today.setHours(0,0,0,0);
@@ -33,7 +32,7 @@ const DEFAULT_PRIOS    = ["Alta","Media","Baja"];
 
 let state = load() || { courses:[...DEFAULT_COURSES], assignments:[] };
 
-/* ========= Inicio ========= */
+/* ========== Inicio ========== */
 document.addEventListener("DOMContentLoaded", ()=>{
   const todayISO = new Date().toISOString().slice(0,10);
   $("#todayStr").textContent = fmtToday2Y(todayISO);
@@ -62,6 +61,7 @@ function renderAll(){
   renderTable();
   renderMetrics();
   renderCharts();
+  renderFocusPanel();
 }
 
 function renderFilters(){
@@ -71,7 +71,7 @@ function renderFilters(){
   sel.addEventListener("change", renderTable);
 }
 
-/* ========= Tabla ========= */
+/* ========== Tabla principal ========== */
 function renderTable(){
   const tbody = $("#tbody"); tbody.innerHTML = "";
   const q = ($("#searchInput").value||"").toLowerCase();
@@ -92,12 +92,12 @@ function renderTable(){
 
   items.forEach(a=>{
     const tr = document.createElement("tr");
-    // Fondo de fila por prioridad
     if(a.priority==="Alta") tr.classList.add("row-high");
     else if(a.priority==="Media") tr.classList.add("row-med");
     else tr.classList.add("row-low");
 
     const dleft = daysLeft(a.due);
+    const subTxt = subProgressText(a);
     tr.innerHTML = `
       <td><input type="checkbox" ${a.status==="Completado"?"checked":""} data-done="${a.id}" title="Marcar completado" /></td>
       <td>${esc(a.title)}</td>
@@ -108,9 +108,10 @@ function renderTable(){
       <td>${prioBadge(a.priority)}</td>
       <td>${esc(a.type||"—")}</td>
       <td>${esc(a.est||"—")}</td>
-      <td>${esc(a.notes||"")}</td>
+      <td>${esc(a.notes||"")}${subTxt}</td>
       <td>${esc(a.grade||"")}</td>
       <td class="actions-row">
+        <span class="link" data-ics="${a.id}">Calendario</span> ·
         <span class="link" data-edit="${a.id}">Editar</span> ·
         <span class="link" data-del="${a.id}">Eliminar</span>
       </td>
@@ -128,6 +129,7 @@ function renderTable(){
         save(); renderAll();
       }
     });
+    tr.querySelector(`[data-ics="${a.id}"]`).addEventListener("click", ()=> downloadICS(a));
   });
 
   if(!items.length){
@@ -147,15 +149,20 @@ function prioBadge(p){
   return `<span class="badge priority ${key}">${p||"—"}</span>`;
 }
 
-/* Termómetro de días (más rosa cuanto más urgente) */
+function subProgressText(a){
+  const subs = a.subs||[];
+  if(!subs.length) return "";
+  const done = subs.filter(x=>x.done).length;
+  return ` <span class="badge" title="Subtareas">✓${done}/${subs.length}</span>`;
+}
+
+/* Termómetro de días */
 function daysThermo(n){
   if(n===null) return "—";
-  // urgencia: 0 (sin urgencia, 21+ días) -> 1 (vencido)
   const horizon = 21;
   const urg = Math.max(0, Math.min(1, 1 - (n / horizon)));
   const width = Math.round((n < 0 ? 1 : urg) * 100);
-  // pastel: L (lightness) sube con menos urgencia; más oscuro si urgente
-  const light = 90 - urg * 28;        // 90% -> 62%
+  const light = 90 - urg * 28;   // más oscuro si urgente
   const color = `hsl(350,75%,${light}%)`;
   const title = n<0 ? `${n} (atrasado)` : `${n} días`;
   return `
@@ -168,13 +175,71 @@ function daysThermo(n){
 
 function esc(s){ return (s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m])); }
 
-/* ========= Formularios ========= */
+/* ========== Panel En Foco ========== */
+function renderFocusPanel(){
+  const overdue = [];
+  const today = [];
+  const soon = [];
+  const now = new Date(); now.setHours(0,0,0,0);
+
+  state.assignments.forEach(a=>{
+    if(a.status==="Completado") return;
+    const d = a.due ? new Date(a.due+"T00:00:00") : null;
+    if(!d) return;
+    const diff = Math.round((d - now)/86400000);
+    if(diff < 0) overdue.push(a);
+    else if(diff === 0) today.push(a);
+    else if(diff > 0 && diff <= 7) soon.push(a);
+  });
+
+  const fill = (elId, arr) => {
+    const ul = $(elId); ul.innerHTML = "";
+    if(arr.length === 0){ ul.innerHTML = `<li class="focus-item"><span class="focus-main">Sin tareas</span></li>`; return; }
+    arr.sort((a,b)=> new Date(a.due)-new Date(b.due)).slice(0,10).forEach(a=>{
+      const li = document.createElement("li");
+      li.className = "focus-item";
+      li.innerHTML = `
+        <div class="focus-main">
+          <span class="focus-title">${esc(a.title)}</span>
+          <span class="focus-chip">${esc(a.course||"General")}</span>
+          <span class="focus-chip">vence: ${fmtShort2Y(a.due)}</span>
+        </div>
+        <div class="focus-actions">
+          <button class="mini-btn" data-done="${a.id}">✔</button>
+          <button class="mini-btn" data-plus1="${a.id}">+1d</button>
+          <button class="mini-btn" data-edit="${a.id}">✎</button>
+          <button class="mini-btn" data-ics="${a.id}">📅</button>
+        </div>
+      `;
+      ul.appendChild(li);
+      li.querySelector(`[data-done="${a.id}"]`).addEventListener("click", ()=>{ a.status="Completado"; save(); renderAll(); });
+      li.querySelector(`[data-plus1="${a.id}"]`).addEventListener("click", ()=>{ postponeDays(a,1); });
+      li.querySelector(`[data-edit="${a.id}"]`).addEventListener("click", ()=> openAssignModal(a));
+      li.querySelector(`[data-ics="${a.id}"]`).addEventListener("click", ()=> downloadICS(a));
+    });
+  };
+
+  fill("#listOverdue", overdue);
+  fill("#listToday", today);
+  fill("#listWeek", soon);
+}
+
+function postponeDays(a, days=1){
+  if(!a.due) return;
+  const d = new Date(a.due+"T00:00:00");
+  d.setDate(d.getDate()+days);
+  a.due = d.toISOString().slice(0,10);
+  save(); renderAll();
+}
+
+/* ========== Formularios (con Subtareas) ========== */
 function openAssignModal(item=null){
   const isEdit = !!item;
   const data = item || {
     id: uid(), title:"", course: state.courses[0]||"", status:"No iniciado", due:"",
-    priority:"Media", type: DEFAULT_TYPES[0], est:"", notes:"", grade:""
+    priority:"Media", type: DEFAULT_TYPES[0], est:"", notes:"", grade:"", subs:[]
   };
+  if(!data.subs) data.subs = [];
 
   const courseOpts = state.courses.map(c=>`<option ${c===data.course?"selected":""}>${c}</option>`).join("");
   const statusOpts = DEFAULT_STATUS.map(s=>`<option ${s===data.status?"selected":""}>${s}</option>`).join("");
@@ -197,12 +262,46 @@ function openAssignModal(item=null){
       </div>
       <div><label>Notas</label><input id="a_notes" class="input" value="${esc(data.notes||"")}" /></div>
       <div><label>Calificación (1–10)</label><input id="a_grade" class="input" value="${esc(data.grade||"")}" placeholder="Ej: 8.5" /></div>
+
+      <div>
+        <label>Subtareas</label>
+        <div id="subList" class="sublist"></div>
+        <div class="subrow">
+          <input id="subText" type="text" placeholder="Nueva subtarea…" />
+          <button id="subAdd" class="mini-btn" type="button">Añadir</button>
+          <span></span>
+        </div>
+      </div>
     </div>
     <div class="actions">
       <button value="cancel" class="btn btn-ghost">Cancelar</button>
       <button id="a_save" class="btn">${isEdit?"Guardar":"Crear"}</button>
     </div>
   `;
+
+  const renderSubs = ()=>{
+    const cont = $("#subList"); cont.innerHTML = "";
+    data.subs.forEach(s=>{
+      const row = document.createElement("div");
+      row.className = "subrow";
+      row.innerHTML = `
+        <input type="checkbox" ${s.done?"checked":""} data-toggle="${s.id}">
+        <input type="text" value="${esc(s.text)}" data-text="${s.id}">
+        <button class="mini-btn" data-del="${s.id}" type="button">Eliminar</button>
+      `;
+      cont.appendChild(row);
+      row.querySelector(`[data-toggle="${s.id}"]`).addEventListener("change",(e)=>{ s.done = e.target.checked; save(); });
+      row.querySelector(`[data-text="${s.id}"]`).addEventListener("input",(e)=>{ s.text = e.target.value; });
+      row.querySelector(`[data-del="${s.id}"]`).addEventListener("click",()=>{ data.subs = data.subs.filter(x=>x.id!==s.id); renderSubs(); });
+    });
+  };
+  renderSubs();
+
+  $("#subAdd").addEventListener("click", ()=>{
+    const v = $("#subText").value.trim(); if(!v) return;
+    data.subs.push({id:uid(), text:v, done:false});
+    $("#subText").value = ""; renderSubs();
+  });
 
   $("#a_save").addEventListener("click",(e)=>{
     e.preventDefault();
@@ -288,17 +387,14 @@ function openCourseManager(){
   $("#modal").showModal();
 }
 
-/* ========= Métricas y gráficas ========= */
+/* ========== Métricas y gráficas ========== */
 function renderMetrics(){
   $("#totalCount").textContent = state.assignments.length;
   $("#doneCount").textContent  = state.assignments.filter(a=>a.status==="Completado").length;
 }
 
 let pieChart, barChart;
-
-// Paleta degradé rosa para columnas 1..10 (1 claro -> 10 oscuro)
 const pinks10 = (()=>{ const arr=[]; for(let i=1;i<=10;i++){ const t=(i-1)/9; const L=92 - t*40; arr.push(`hsl(340,85%,${L}%)`);} return arr; })();
-// Tonos pastel para estados (torta)
 const statusPinks = {
   "No iniciado": "hsl(340,85%,90%)",
   "En progreso": "hsl(340,80%,83%)",
@@ -308,7 +404,7 @@ const statusPinks = {
 };
 
 function renderCharts(){
-  // Pie por estado
+  // Pie estados
   const statuses = ["No iniciado","En progreso","Entregado","Calificado","Completado"];
   const counts = statuses.map(s => state.assignments.filter(a=>a.status===s).length);
   if(pieChart) pieChart.destroy();
@@ -337,7 +433,35 @@ function renderCharts(){
   });
 }
 
-/* ========= Importar / Exportar ========= */
+/* ========== .ICS (calendario) ========== */
+function downloadICS(a){
+  if(!a.due){ alert("Esta tarea no tiene fecha límite."); return; }
+  const ymd = a.due.replaceAll("-","");
+  const uidStr = `${a.id}@assignment-tracker`;
+  const title = `Entrega: ${a.title}`;
+  // Evento de día completo con DTEND día siguiente
+  const dtEnd = (()=>{ const d = new Date(a.due+"T00:00:00"); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10).replaceAll("-",""); })();
+  const desc = `Curso: ${a.course||"—"}\\nEstado: ${a.status}\\nPrioridad: ${a.priority}\\nNotas: ${(a.notes||"").replace(/\n/g," ")}`;
+  const ics = [
+    "BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Assignment Tracker//ES",
+    "BEGIN:VEVENT",
+    `UID:${uidStr}`,
+    `SUMMARY:${escapeICS(title)}`,
+    `DTSTART;VALUE=DATE:${ymd}`,
+    `DTEND;VALUE=DATE:${dtEnd}`,
+    `DESCRIPTION:${escapeICS(desc)}`,
+    `CATEGORIES:${escapeICS(a.course||"Tarea")}`,
+    "END:VEVENT","END:VCALENDAR"
+  ].join("\r\n");
+  const blob = new Blob([ics],{type:"text/calendar"});
+  const url = URL.createObjectURL(blob);
+  const aTag = document.createElement("a");
+  aTag.href = url; aTag.download = `tarea_${a.title.replace(/\s+/g,"_")}.ics`;
+  document.body.appendChild(aTag); aTag.click(); aTag.remove(); URL.revokeObjectURL(url);
+}
+function escapeICS(s){ return (s||"").replace(/([,;])/g,"\\$1"); }
+
+/* ========== Importar / Exportar ========== */
 function exportJSON(){
   const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
   const url = URL.createObjectURL(blob);
@@ -351,6 +475,8 @@ function importJSON(e){
     try{
       const data = JSON.parse(reader.result);
       if(!data || !("assignments" in data && "courses" in data)) throw new Error("Formato inválido.");
+      // Asegurar que cada tarea tenga arreglo de subtareas
+      (data.assignments||[]).forEach(t=>{ if(!t.subs) t.subs=[]; });
       state = {...state, ...data}; save(); location.reload();
     }catch(err){ alert("No se pudo importar: " + err.message); }
   };
