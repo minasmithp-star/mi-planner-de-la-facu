@@ -20,11 +20,7 @@ const DEFAULT_PRIOS   = ["Alta","Media","Baja"];
 
 let state = load() || {
   courses: [...DEFAULT_COURSES],
-  assignments: [
-    // Ejemplo:
-    // { id:uid(), title:"Informe de laboratorio", course:"Química", status:"En progreso",
-    //   due:"2025-09-05", priority:"Alta", type:"Laboratorio", est:"3h", notes:"", grade:"" , done:false }
-  ]
+  assignments: []
 };
 
 // ===== Inicio =====
@@ -58,7 +54,6 @@ function renderAll(){
 }
 
 function renderFilters(){
-  // cursos
   const sel = $("#filterCourse");
   sel.innerHTML = `<option value="all">Todos los cursos</option>` +
     state.courses.map(c=>`<option value="${c}">${c}</option>`).join("");
@@ -127,9 +122,7 @@ function renderTable(){
 }
 
 function statusBadge(st){
-  const map = {
-    "No iniciado":"not","En progreso":"prog","Entregado":"sub","Calificado":"grad","Completado":"done"
-  };
+  const map = {"No iniciado":"not","En progreso":"prog","Entregado":"sub","Calificado":"grad","Completado":"done"};
   const key = map[st] || "not";
   return `<span class="badge status ${key}">${st||"No iniciado"}</span>`;
 }
@@ -173,7 +166,7 @@ function openAssignModal(item=null){
         <div><label>Tiempo estimado</label><input id="a_est" class="input" value="${escape(data.est||"")}" placeholder="Ej: 3h, 45m" /></div>
       </div>
       <div><label>Notas</label><input id="a_notes" class="input" value="${escape(data.notes||"")}" /></div>
-      <div><label>Calificación (A–F o número)</label><input id="a_grade" class="input" value="${escape(data.grade||"")}" /></div>
+      <div><label>Calificación (1–10)</label><input id="a_grade" class="input" value="${escape(data.grade||"")}" placeholder="Ej: 8.5" /></div>
     </div>
     <div class="actions">
       <button value="cancel" class="btn btn-ghost">Cancelar</button>
@@ -191,7 +184,7 @@ function openAssignModal(item=null){
     data.type  = $("#a_type").value;
     data.est   = $("#a_est").value.trim();
     data.notes = $("#a_notes").value.trim();
-    data.grade = $("#a_grade").value.trim();
+    data.grade = $("#a_grade").value.trim(); // número 1–10 (texto permitido)
 
     if(!data.title) return alert("Escribe un título.");
     if(isEdit){
@@ -239,7 +232,6 @@ function openCourseManager(){
     btn.addEventListener("click", ()=>{
       const idx = Number(btn.dataset.del);
       const name = state.courses[idx];
-      // Reasignar tareas con ese curso a vacío
       state.assignments.forEach(a=>{ if(a.course===name) a.course=""; });
       state.courses.splice(idx,1); save(); $("#modal").close(); openCourseManager();
     });
@@ -266,7 +258,7 @@ function openCourseManager(){
   $("#modal").showModal();
 }
 
-// ===== Métricas y gráficos =====
+// ===== Métricas y gráficas =====
 function renderMetrics(){
   const total = state.assignments.length;
   const done  = state.assignments.filter(a=>a.status==="Completado").length;
@@ -275,26 +267,73 @@ function renderMetrics(){
 }
 
 let pieChart, barChart;
-function renderCharts(){
-  // Pie: Completadas vs No iniciadas
-  const done = state.assignments.filter(a=>a.status==="Completado").length;
-  const notStarted = state.assignments.filter(a=>a.status==="No iniciado").length;
 
+// Paletas
+const pinks10 = (()=>{ // 1..10 (1 claro -> 10 oscuro)
+  const arr = [];
+  for(let i=1;i<=10;i++){
+    const t = (i-1)/9;               // 0 .. 1
+    const L = 92 - t*40;             // 92% -> 52% (más oscuro hacia 10)
+    arr.push(`hsl(340,85%,${L}%)`);
+  }
+  return arr;
+})();
+
+const statusPinks = {
+  "No iniciado":   "hsl(340,90%,88%)",
+  "En progreso":   "hsl(340,85%,78%)",
+  "Entregado":     "hsl(340,80%,70%)",
+  "Calificado":    "hsl(340,75%,62%)",
+  "Completado":    "hsl(340,70%,54%)"
+};
+
+function renderCharts(){
+  // Pie por estado (5 tonos de rosa)
+  const statuses = ["No iniciado","En progreso","Entregado","Calificado","Completado"];
+  const counts = statuses.map(s => state.assignments.filter(a=>a.status===s).length);
   if(pieChart) pieChart.destroy();
-  pieChart = new Chart($("#pieDone"), {
+  pieChart = new Chart($("#pieStatus"), {
     type:"pie",
-    data:{ labels:["Completadas","No iniciadas"], datasets:[{ data:[done, notStarted] }]},
-    options:{ plugins:{ legend:{ position:"bottom" } } }
+    data:{
+      labels: statuses,
+      datasets:[{
+        data: counts,
+        backgroundColor: statuses.map(s=>statusPinks[s])
+      }]
+    },
+    options:{ plugins:{ legend:{ position:"bottom" } }, maintainAspectRatio:false }
   });
 
-  // Barras: distribución A–F de campo grade (se toma primera letra)
-  const letters = ["A","B","C","D","F"];
-  const counts = letters.map(L => state.assignments.filter(a=>(a.grade||"").trim().toUpperCase().startsWith(L)).length);
+  // Barras 1..10 con degradé rosa (10 más oscuro)
+  const bins = Array.from({length:10},(_,i)=>i+1);
+  const binCounts = new Array(10).fill(0);
+  state.assignments.forEach(a=>{
+    const raw = (a.grade||"").toString().replace(",",".").trim();
+    const val = parseFloat(raw);
+    if(!isNaN(val)){
+      const r = Math.round(val);
+      if(r>=1 && r<=10) binCounts[r-1] += 1;
+    }
+  });
   if(barChart) barChart.destroy();
   barChart = new Chart($("#barGrades"), {
     type:"bar",
-    data:{ labels:letters, datasets:[{ label:"Cantidad", data:counts }]},
-    options:{ scales:{ y:{ beginAtZero:true, precision:0 } }, plugins:{ legend:{ display:false } } }
+    data:{
+      labels: bins.map(String),
+      datasets:[{
+        label:"Cantidad",
+        data: binCounts,
+        backgroundColor: pinks10,   // degradé 1..10
+        borderColor: pinks10,
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options:{
+      maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true, precision:0 } },
+      plugins:{ legend:{ display:false } }
+    }
   });
 }
 
